@@ -1,8 +1,8 @@
 /**
  * Centralized API configuration for the AgriML application.
- * Using 127.0.0.1 instead of localhost for better reliability on some systems.
+ * Uses environment variable for production, falls back to local for development.
  */
-export const API_BASE_URL = "http://127.0.0.1:5000";
+export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 
 export const AUTH_ENDPOINTS = {
   SEND_OTP: `${API_BASE_URL}/api/auth/send-otp`,
