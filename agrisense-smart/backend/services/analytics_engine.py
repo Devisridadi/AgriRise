@@ -1,116 +1,112 @@
 """
-Cloud Analytics Engine for detailed soil analysis and improvement suggestions.
+Local Analytics Engine for detailed soil analysis and improvement suggestions.
 Matches exactly what the frontend expects by providing crop_health_data, priority_crops, etc.
 """
 
-import google.generativeai as cloud_analytics
-import json
-import base64
 import logging
-from config import settings
-from models.schemas import SoilClimateInput
-from services.crop_data import get_crop_ideal
+from typing import Dict, Any, List
+
+# Added type: ignore to squash IDE specific Pylance workspace resolution errors
+from models.schemas import SoilClimateInput  # type: ignore
+from services.crop_data import get_crop_ideal, CROP_REQUIREMENTS  # type: ignore
 
 logger = logging.getLogger(__name__)
 
 class CloudAnalyticsService:
     def __init__(self):
-        self.api_key = settings.ANALYTICS_API_KEY
-        if self.api_key:
-            cloud_analytics.configure(api_key=self.api_key)
-            # Use obscured model identifier
-            model_ident = base64.b64decode("Z2VtaW5pLTIuNS1mbGFzaA==").decode("utf-8")
-            self.model = cloud_analytics.GenerativeModel(model_ident)
-        else:
-            self.model = None
-            logger.warning("ANALYTICS_API_KEY not configured. Advanced analysis will be disabled.")
+        pass
 
     async def get_analysis(self, input_data: SoilClimateInput, crop_name: str) -> dict:
         """
-        Get detailed comparison and suggestions from the Cloud Engine.
+        Get detailed algorithmic comparison and suggestions natively using python logic.
         Returns the exact JSON structure expected by the frontend.
         """
-        if not self.model:
-            return {
-                "comparison": None,
-                "suggestions": None,
-                "crop_health_data": None,
-                "priority_crops": None,
-                "error": "Analytics API key not configured"
-            }
-
         ideal = get_crop_ideal(crop_name)
         
-        prompt = f"""
-        Analyze the following soil and climate data for a farmer and provide a structured JSON response.
-        The farmer wants to grow: {crop_name}.
+        # 1. Generate Comparison
+        comparison = {}
+        def check_status(val, r_min, r_max, unit):
+            if val < r_min: return f"Below ideal range ({r_min}-{r_max} {unit}). Needs Supplementation."
+            if val > r_max: return f"Above ideal range ({r_min}-{r_max} {unit}). Might risk toxicity."
+            return f"Optimal! Within range ({r_min}-{r_max} {unit})."
+
+        comparison["N"] = check_status(input_data.N, ideal['N'][0], ideal['N'][1], "kg/ha")
+        comparison["P"] = check_status(input_data.P, ideal['P'][0], ideal['P'][1], "kg/ha")
+        comparison["K"] = check_status(input_data.K, ideal['K'][0], ideal['K'][1], "kg/ha")
+        comparison["pH"] = check_status(input_data.pH, ideal['pH'][0], ideal['pH'][1], "")
+        comparison["temperature"] = check_status(input_data.temperature, ideal['temperature'][0], ideal['temperature'][1], "°C")
+        comparison["humidity"] = check_status(input_data.humidity, ideal['humidity'][0], ideal['humidity'][1], "%")
+        comparison["rainfall"] = check_status(input_data.rainfall, ideal['rainfall'][0], ideal['rainfall'][1], "mm")
+
+        # 2. Suggestions
+        ph_adj = "Apply lime if too acidic; apply sulfur if too alkaline." if (input_data.pH < ideal['pH'][0] or input_data.pH > ideal['pH'][1]) else "pH is perfectly balanced. Maintain your current practices."
+        nut_add = []
+        if input_data.N < ideal['N'][0]: nut_add.append("Nitrogen (N)")
+        if input_data.P < ideal['P'][0]: nut_add.append("Phosphorus (P)")
+        if input_data.K < ideal['K'][0]: nut_add.append("Potassium (K)")
+        nut_str = f"Add {', '.join(nut_add)} through enriched natural compost or synthetic mixes to match ideal demands." if nut_add else "Nutrients are balanced. No major additions needed."
         
-        Current Soil Values:
-        - Nitrogen (N): {input_data.N} kg/ha
-        - Phosphorus (P): {input_data.P} kg/ha
-        - Potassium (K): {input_data.K} kg/ha
-        - Soil pH: {input_data.pH}
-        - Temperature: {input_data.temperature}°C
-        - Humidity: {input_data.humidity}%
-        - Rainfall: {input_data.rainfall} mm
+        moisture = "Increase irrigation frequency." if input_data.rainfall < ideal['rainfall'][0] else ("Improve drainage." if input_data.rainfall > ideal['rainfall'][1] else "Water levels are ideal. Keep up current watering schedule.")
         
-        Ideal Requirements for {crop_name}:
-        - N: {ideal['N'][0]}-{ideal['N'][1]} kg/ha
-        - P: {ideal['P'][0]}-{ideal['P'][1]} kg/ha
-        - K: {ideal['K'][0]}-{ideal['K'][1]} kg/ha
-        - pH: {ideal['pH'][0]}-{ideal['pH'][1]}
-        - Temperature: {ideal['temperature'][0]}-{ideal['temperature'][1]}°C
-        - Humidity: {ideal['humidity'][0]}-{ideal['humidity'][1]}%
-        - Rainfall: {ideal['rainfall'][0]}-{ideal['rainfall'][1]} mm
+        suggestions = {
+            "ph_adjustment": ph_adj,
+            "nutrient_addition": nut_str,
+            "moisture_improvement": moisture,
+            "organic_matter_correction": "Incorporate well-rotted manure, compost, or cover crops annually to maintain soil biology.",
+            "organic_advice": "Focus on crop rotation and organic mulch to retain soil structure and suppress weeds naturally."
+        }
 
-        Please provide the following in the JSON response:
-        1. "comparison": Comparison between current values and ideal requirements for each parameter.
-        2. "suggestions": 
-           - "ph_adjustment": Detailed advice on how to adjust the pH.
-           - "nutrient_addition": Advice on N, P, K addition based on current values.
-           - "moisture_improvement": Advice on managing moisture/rainfall/humidity.
-           - "organic_matter_correction": Advice on adding organic matter/compost.
-           - "organic_advice": Practical organic farming tips and natural pest control.
-        3. "fertilizers": Specific fertilizer application plan.
-        4. "soil_correction": Detailed status of soil health and corrective actions.
-        5. "crop_health_data": Tips and data to increase crop health and yield.
-        6. "priority_crops": A list of 3 other crops that best suit the current parameters. Include:
-           - "name": Name of the crop.
-           - "suitability_score": A score from 1-100.
-           - "data": A brief summary of why it suits the soil/climate.
+        # 3. Fertilizers Plan
+        fert_plan = f"Depending on the exact growth stage of {crop_name}, apply a balanced NPK mix favoring your deficiencies. "
+        if nut_add:
+            fert_plan += f"Prioritize inputs rich in {', '.join([n.split()[0] for n in nut_add])}. Split applications during vegetative and flowering stages for maximum efficiency."
+        else:
+            fert_plan += "Stick to maintenance dosages using slow-release organic fertilizers."
 
-        Return ONLY a JSON object with this structure (no markdown code blocks):
-        {{
-            "comparison": {{
-                "N": "...", "P": "...", "K": "...", "pH": "...", 
-                "temperature": "...", "humidity": "...", "rainfall": "..."
-            }},
-            "suggestions": {{
-                "ph_adjustment": "...",
-                "nutrient_addition": "...",
-                "moisture_improvement": "...",
-                "organic_matter_correction": "...",
-                "organic_advice": "..."
-            }},
-            "fertilizers": "...",
-            "soil_correction": "...",
-            "crop_health_data": "...",
-            "priority_crops": [
-                {{ "name": "...", "suitability_score": 0, "data": "..." }}
-            ]
-        }}
-        """
+        # 4. Soil Correction
+        soil_diffs = []
+        if input_data.pH < ideal['pH'][0]: soil_diffs.append("acidic tendencies")
+        if input_data.pH > ideal['pH'][1]: soil_diffs.append("alkaline tendencies")
+        if input_data.N < ideal['N'][0]: soil_diffs.append("nitrogen deficiency")
+        if not soil_diffs:
+            soil_corr = "Your soil structure is healthy. Continue periodic lab testing to prevent future depletion."
+        else:
+            soil_corr = f"Corrective measures needed for: {', '.join(soil_diffs)}. Address these prior to the onset of the main growing season."
 
-        try:
-            response = await self.model.generate_content_async(prompt)
-            text = response.text.replace('```json', '').replace('```', '').strip()
-            return json.loads(text)
-        except Exception as e:
-            logger.error(f"Analytics Engine error: {str(e)}")
-            return {
-                "comparison": None,
-                "suggestions": None,
-                "crop_health_data": None,
-                "priority_crops": None,
-                "error": f"Failed to get advanced analysis: {str(e)}"
-            }
+        # 5. Crop Health Data
+        health_data = f"With {input_data.temperature}°C average weather, {crop_name} yields best when planted on time. Ensure continuous monitoring for local pest outbreaks common at {input_data.humidity}% humidity."
+
+        # 6. Priority Crops
+        def score_crop(c_ideal, data):
+            sc = 100
+            if data.N < c_ideal['N'][0] or data.N > c_ideal['N'][1]: sc -= 10
+            if data.P < c_ideal['P'][0] or data.P > c_ideal['P'][1]: sc -= 10
+            if data.K < c_ideal['K'][0] or data.K > c_ideal['K'][1]: sc -= 10
+            if data.pH < c_ideal['pH'][0] or data.pH > c_ideal['pH'][1]: sc -= 20
+            if data.temperature < c_ideal['temperature'][0] or data.temperature > c_ideal['temperature'][1]: sc -= 20
+            if data.rainfall < c_ideal['rainfall'][0] or data.rainfall > c_ideal['rainfall'][1]: sc -= 15
+            return max(10, sc)
+
+        scored_crops: List[Dict[str, Any]] = []
+        for crp, c_ideal in CROP_REQUIREMENTS.items():
+            if crp.lower() == crop_name.lower():
+                continue
+            sc = score_crop(c_ideal, input_data)
+            scored_crops.append({
+                "name": crp,
+                "suitability_score": sc,
+                "data": f"Matches {sc}% of optimal growing parameters (especially NPK and climate alignment)."
+            })
+        
+        # Sort and get top 3
+        scored_crops.sort(key=lambda x: x['suitability_score'], reverse=True)
+        priority_crops = scored_crops[:3]  # type: ignore
+
+        return {
+            "comparison": comparison,
+            "suggestions": suggestions,
+            "fertilizers": fert_plan,
+            "soil_correction": soil_corr,
+            "crop_health_data": health_data,
+            "priority_crops": priority_crops
+        }

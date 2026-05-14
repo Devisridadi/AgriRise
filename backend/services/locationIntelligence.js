@@ -10,24 +10,32 @@ const soilBuffer = new Map();
  * Fetches climate data and estimates soil parameters for a given location.
  * Integrated with Google Maps Platform concepts for hyperlocal data.
  */
-const getLocationIntelligence = async (lat, lon) => {
+const getLocationIntelligence = async (latRaw, lonRaw) => {
     try {
+        const lat = parseFloat(latRaw);
+        const lon = parseFloat(lonRaw);
         // Round coordinates to 2 decimal places to group hyperlocal areas (~1.1km grid)
         const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)}`;
         // 1. Fetch real-time weather (Using Open-Meteo as a reliable base, 
         // can be easily swapped for Google Cloud Weather if key provided)
-        const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation&daily=precipitation_sum&timezone=auto`;
-        const weatherRes = await axios.get(weatherUrl);
-        const currentRef = weatherRes.data.current;
-        const dailyRef = weatherRes.data.daily;
+        let weatherData = { temperature: 25, humidity: 60, rainfall: 0 }; // Sensible defaults
+        try {
+            const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation&daily=precipitation_sum&timezone=auto`;
+            const weatherRes = await axios.get(weatherUrl);
+            const currentRef = weatherRes.data.current;
+            const dailyRef = weatherRes.data.daily;
 
-        const weatherData = {
-            temperature: Math.round(currentRef.temperature_2m),
-            humidity: Math.round(currentRef.relative_humidity_2m),
-            rainfall: dailyRef.precipitation_sum[0] || 0
-        };
+            weatherData = {
+                temperature: Math.round(currentRef.temperature_2m),
+                humidity: Math.round(currentRef.relative_humidity_2m),
+                rainfall: dailyRef.precipitation_sum[0] || 0
+            };
+        } catch (weatherError) {
+            console.error("Open-Meteo API failed, using fallback weather data:", weatherError.message);
+        }
 
         let locationName = `Lat: ${lat.toFixed(2)}, Lon: ${lon.toFixed(2)}`;
+        let soilData = {};
 
         // Check if we have cached results for this area
         if (soilBuffer.has(cacheKey)) {

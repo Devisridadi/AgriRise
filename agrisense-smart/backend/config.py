@@ -32,7 +32,6 @@ class Settings(BaseSettings):
     CROP_MODEL_PATH: str = "ml/models/crop_model.pkl"
     FERTILIZER_MODEL_PATH: str = "ml/models/fertilizer_model.pkl"
     
-    ANALYTICS_API_KEY: str = ""
     
     # Environment
     DEBUG: bool = True

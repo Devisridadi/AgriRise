@@ -51,22 +51,36 @@ export async function getLocationCoords(): Promise<{ lat: number; lon: number }>
     });
 }
 export async function getCoordsFromCity(city: string): Promise<{ lat: number; lon: number; name: string }> {
-    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`;
+    // Using Nominatim OpenStreetMap for better global city/village coverage
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`;
 
     try {
-        const response = await fetch(url);
+        const response = await fetch(url, {
+            headers: {
+                "Accept-Language": "en-US,en;q=0.9",
+                "User-Agent": "AgriSenseApp/1.0"
+            }
+        });
         if (!response.ok) throw new Error("Geocoding failed");
 
         const data = await response.json();
-        if (!data.results || data.results.length === 0) {
+        if (!data || data.length === 0) {
             throw new Error(`Location "${city}" not found.`);
         }
 
-        const result = data.results[0];
+        const result = data[0];
+        
+        // Nominatim display_name is usually "City, District, State, Country"
+        // Keep it clean (e.g. "Anakapalli, Andhra Pradesh")
+        const nameParts = result.display_name.split(',');
+        const shortName = nameParts.length > 1 
+            ? `${nameParts[0].trim()}, ${nameParts[1].trim()}`
+            : result.display_name;
+
         return {
-            lat: result.latitude,
-            lon: result.longitude,
-            name: `${result.name}, ${result.admin1 || ''} ${result.country || ''}`.trim().replace(/\s\s+/g, ' '),
+            lat: parseFloat(result.lat),
+            lon: parseFloat(result.lon),
+            name: shortName,
         };
     } catch (error) {
         console.error("Geocoding error:", error);

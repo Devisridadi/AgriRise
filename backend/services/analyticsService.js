@@ -86,7 +86,7 @@ const getAnalysis = async (inputData, cropName) => {
         return {
             comparison: null,
             suggestions: null,
-            error: \`Failed to get AI analysis: \${error.message}\`
+            error: `Failed to get AI analysis: ${error.message}`
         };
     }
 };

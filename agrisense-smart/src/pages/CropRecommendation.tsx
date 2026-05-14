@@ -123,22 +123,27 @@ export default function CropRecommendation() {
       const coords = await getCoordsFromCity(manualLocation);
       const weather = await fetchWeatherData(coords.lat, coords.lon);
 
-      setValues(prev => ({
-        ...prev,
+      const newValues = {
+        ...values,
         temperature: weather.temperature,
         humidity: weather.humidity,
-        rainfall: weather.rainfall > 0 ? Math.min(Math.max(weather.rainfall * 10, 20), 300) : prev.rainfall,
-        nitrogen: weather.nitrogen || prev.nitrogen,
-        phosphorus: weather.phosphorus || prev.phosphorus,
-        potassium: weather.potassium || prev.potassium,
-        ph: weather.ph || prev.ph
-      }));
+        rainfall: weather.rainfall > 0 ? Math.min(Math.max(weather.rainfall * 10, 20), 300) : values.rainfall,
+        nitrogen: weather.nitrogen || values.nitrogen,
+        phosphorus: weather.phosphorus || values.phosphorus,
+        potassium: weather.potassium || values.potassium,
+        ph: weather.ph || values.ph
+      };
+      
+      setValues(newValues);
+      setManualLocation(coords.name); // Keep the official location name instead of clearing it
 
       toast({
         title: `Location: ${coords.name}`,
-        description: `Weather data updated for ${coords.name}.`,
+        description: `Weather data updated. Running prediction...`,
       });
-      setManualLocation("");
+      
+      // Auto trigger prediction
+      await handlePredict(newValues);
     } catch (err: any) {
       toast({
         title: "Search failed",
@@ -156,16 +161,18 @@ export default function CropRecommendation() {
       const coords = await getLocationCoords();
       const weather = await fetchWeatherData(coords.lat, coords.lon);
 
-      setValues(prev => ({
-        ...prev,
+      const newValues = {
+        ...values,
         temperature: weather.temperature,
         humidity: weather.humidity,
-        rainfall: weather.rainfall > 0 ? Math.min(Math.max(weather.rainfall * 10, 20), 300) : prev.rainfall,
-        nitrogen: weather.nitrogen || prev.nitrogen,
-        phosphorus: weather.phosphorus || prev.phosphorus,
-        potassium: weather.potassium || prev.potassium,
-        ph: weather.ph || prev.ph
-      }));
+        rainfall: weather.rainfall > 0 ? Math.min(Math.max(weather.rainfall * 10, 20), 300) : values.rainfall,
+        nitrogen: weather.nitrogen || values.nitrogen,
+        phosphorus: weather.phosphorus || values.phosphorus,
+        potassium: weather.potassium || values.potassium,
+        ph: weather.ph || values.ph
+      };
+
+      setValues(newValues);
 
       if (weather.locationName) {
         setManualLocation(weather.locationName);
@@ -173,8 +180,11 @@ export default function CropRecommendation() {
 
       toast({
         title: "Location detected",
-        description: `All parameters auto-filled for ${weather.locationName || 'your current location'}.`,
+        description: `Running prediction for ${weather.locationName || 'your current location'}...`,
       });
+      
+      // Auto trigger prediction
+      await handlePredict(newValues);
     } catch (err: any) {
       toast({
         title: "Location detection failed",
@@ -186,20 +196,21 @@ export default function CropRecommendation() {
     }
   };
 
-  const handlePredict = async () => {
+  const handlePredict = async (overrideValues?: typeof values) => {
     setIsLoading(true);
     setError(null);
     setResult(null);
 
+    const currentVals = overrideValues || values;
     const payload = {
-      N: values.nitrogen,
-      P: values.phosphorus,
-      K: values.potassium,
-      pH: values.ph,
-      temperature: values.temperature,
-      humidity: values.humidity,
-      rainfall: values.rainfall,
-      target_crop: values.targetCrop || null
+      N: currentVals.nitrogen,
+      P: currentVals.phosphorus,
+      K: currentVals.potassium,
+      pH: currentVals.ph,
+      temperature: currentVals.temperature,
+      humidity: currentVals.humidity,
+      rainfall: currentVals.rainfall,
+      target_crop: currentVals.targetCrop || null
     };
 
     try {
